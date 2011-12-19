@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+
+DEVICE=(ARGV[0] or "/")
+
+COLORS = {
+	:brimwhite => "\x1b[1;37m",
+	:white => "\x1b[m",
+	:gray => "\x1b[37m",
+	:magenta   => "\x1b[1;35m",
+	:blue => "\x1b[1;34m",
+	:yellow => "\x1b[1;33m",
+	:green => "\x1b[1;32m",
+	:red   => "\x1b[1;31m",
+	:darkgray   => "\x1b[1;30m",
+	:reset => "\x1b[m"
+}
+
+def color(text, c)
+	COLORS[c] + text + COLORS[:reset]
+end
+
+def colorsize(size)
+	text = size.to_human
+	return color(text, :red) if size > 1000_000_000
+	return color(text, :yellow) if size > 10_000_000
+	return text
+end
+
+require 'etc'
+
+raise "Should be launch as root" unless Process.uid == 0
+
+class Numeric
+  def to_human
+    units = %w{B KB MB GB TB}
+    e = (Math.log(self)/Math.log(1024)).floor
+    s = "%.3f" % (to_f / 1024**e)
+    s.sub(/\.?0*$/, units[e])
+  end
+end
+
+puts "find deleted but not closed files in directory : #{DEVICE}"
+
+entries = []
+root_dev = (DEVICE == "ALL" ? nil : File.stat(DEVICE).dev)
+mypid = Process.pid
+for procdir in Dir.open("/proc")
+	pid = procdir.to_i
+	next if pid == 0	
+	next if pid == mypid
+	begin
+		for fd in Dir.open("/proc/#{pid}/fd/")
+			fdpath = "/proc/#{pid}/fd/#{fd}"
+			next unless File.lstat(fdpath).symlink?
+			link = File.readlink(fdpath)
+			next unless link.include? "deleted"
+			stat = File.stat(fdpath)
+			next unless root_dev.nil? or stat.dev == root_dev
+			size = stat.size
+			next unless size > 0
+			entries.push({ :fd => fd, :link => link, :size => size, :pid => pid, :uid => stat.uid })
+		end
+	rescue Errno::ENOENT
+		# process or fd vanished during check
+	end
+end
+
+# print some stats
+
+size_by_uid = {}
+for entry in entries
+	size_by_uid[entry[:uid]] = (size_by_uid[entry[:uid]] or 0) + entry[:size]
+end
+sorted = size_by_uid.sort_by do |k,v| v end
+
+puts "Top 3 users"
+sorted.reverse.take(3).each do |uid,size|
+	puts "  #{Etc.getpwuid(uid).name} #{colorsize(size)}"
+end
+
+
+puts "Top 3 files"
+entries.sort_by do |entry| entry[:size] end.reverse.take(3).each do |entry|
+	puts "  #{entry[:pid]} #{entry[:link]} #{colorsize(entry[:size])}"
+end
