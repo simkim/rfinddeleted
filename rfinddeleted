@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 DEVICE=(ARGV[0] or "/")
+TOP=5
 
 COLORS = {
 	:brimwhite => "\x1b[1;37m",
@@ -53,7 +54,7 @@ for procdir in Dir.open("/proc")
 			fdpath = "/proc/#{pid}/fd/#{fd}"
 			next unless File.lstat(fdpath).symlink?
 			link = File.readlink(fdpath)
-			next unless link.include? "deleted"
+			next unless link.include? "(deleted)"
 			stat = File.stat(fdpath)
 			next unless root_dev.nil? or stat.dev == root_dev
 			size = stat.size
@@ -73,13 +74,13 @@ for entry in entries
 end
 sorted = size_by_uid.sort_by do |k,v| v end
 
-puts "Top 3 users"
-sorted.reverse.take(3).each do |uid,size|
+puts "Top #{TOP} users"
+sorted.reverse.take(TOP).each do |uid,size|
 	puts "  #{Etc.getpwuid(uid).name} #{colorsize(size)}"
 end
 
 
-puts "Top 3 files"
-entries.sort_by do |entry| entry[:size] end.reverse.take(3).each do |entry|
+puts "Top #{TOP} files"
+entries.sort_by do |entry| entry[:size] end.reverse.take(TOP).each do |entry|
 	puts "  #{entry[:pid]} #{entry[:link]} #{colorsize(entry[:size])}"
 end
