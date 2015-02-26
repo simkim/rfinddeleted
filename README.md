@@ -1,3 +1,7 @@
+rfinddeleted is a quick hack to find all deleted but not wiped files. It's caused by a process owning a file descriptor on this file. Sometimes it's on purpose, sometimes not.
+
+As you can see I rm'ed a rails log file, but the process isn't aware so the space is used and the log are not longer accessible easily (You can access it using the proc/PID/fd/FD entry).
+
 ```
     sudo ./rfinddeleted 
 
